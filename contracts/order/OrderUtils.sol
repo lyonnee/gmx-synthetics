@@ -13,10 +13,15 @@ import "./OrderEventUtils.sol";
 
 import "../nonce/NonceUtils.sol";
 import "../oracle/Oracle.sol";
+import "../oracle/OracleUtils.sol";
 import "../event/EventEmitter.sol";
 
+import "./IncreaseOrderUtils.sol";
+import "./DecreaseOrderUtils.sol";
+import "./SwapOrderUtils.sol";
 import "./BaseOrderUtils.sol";
-import "./IBaseOrderUtils.sol";
+
+import "../swap/SwapUtils.sol";
 
 import "../gas/GasUtils.sol";
 import "../callback/CallbackUtils.sol";
@@ -45,73 +50,68 @@ library OrderUtils {
         bytes reasonBytes;
     }
 
-    struct CreateOrderCache {
-        bool shouldRecordSeparateExecutionFeeTransfer;
-        address wnt;
-        uint256 initialCollateralDeltaAmount;
-        uint256 estimatedGasLimit;
-        uint256 oraclePriceCount;
-        uint256 executionFeeDiff;
-    }
-
     // @dev creates an order in the order store
     // @param dataStore DataStore
     // @param eventEmitter EventEmitter
     // @param orderVault OrderVault
     // @param account the order account
     // @param params IBaseOrderUtils.CreateOrderParams
-    // @param shouldCapMaxExecutionFee whether to cap the max execution fee
     function createOrder(
         DataStore dataStore,
         EventEmitter eventEmitter,
         OrderVault orderVault,
         IReferralStorage referralStorage,
         address account,
-        IBaseOrderUtils.CreateOrderParams memory params,
-        bool shouldCapMaxExecutionFee
+        IBaseOrderUtils.CreateOrderParams memory params
     ) external returns (bytes32) {
+        // 1. 账户验证
         AccountUtils.validateAccount(account);
-
+        // 2. 设置推荐人
         ReferralUtils.setTraderReferralCode(referralStorage, account, params.referralCode);
 
-        CreateOrderCache memory cache;
+        // 3. 获取和处理不同订单类型的保证金, 并校验执行费
+        uint256 initialCollateralDeltaAmount;
+        // wnt 代表 WNT（Wrapped Native Token，如 WETH），GMX 交易系统使用 WNT 处理原生代币。
+        address wnt = TokenUtils.wnt(dataStore);
+        // 用于标记是否需要单独转移 executionFee（执行费用）
+        bool shouldRecordSeparateExecutionFeeTransfer = true;
 
-        cache.wnt = TokenUtils.wnt(dataStore);
-        cache.shouldRecordSeparateExecutionFeeTransfer = true;
-
+        // 处理不同订单类型的保证金
         if (
             params.orderType == Order.OrderType.MarketSwap ||
             params.orderType == Order.OrderType.LimitSwap ||
             params.orderType == Order.OrderType.MarketIncrease ||
-            params.orderType == Order.OrderType.LimitIncrease ||
-            params.orderType == Order.OrderType.StopIncrease
+            params.orderType == Order.OrderType.LimitIncrease
         ) {
-            // for swaps and increase orders, the initialCollateralDeltaAmount is set based on the amount of tokens
-            // transferred to the orderVault
-            cache.initialCollateralDeltaAmount = orderVault.recordTransferIn(params.addresses.initialCollateralToken);
-            if (params.addresses.initialCollateralToken == cache.wnt) {
-                if (cache.initialCollateralDeltaAmount < params.numbers.executionFee) {
-                    revert Errors.InsufficientWntAmountForExecutionFee(
-                        cache.initialCollateralDeltaAmount,
-                        params.numbers.executionFee
-                    );
+            // 对于 Swap 和 Increase 订单，保证金来自 orderVault, 资金从 orderVault 中获取，确保用户已经存入抵押金
+            // sendWnt() 会将用户保证金(抵押品), 存入到orderVault中
+            initialCollateralDeltaAmount = orderVault.recordTransferIn(params.addresses.initialCollateralToken);
+            // 如果保证金类型是包装的原生代币类型, 则需要先校验并扣除executionFee
+            if (params.addresses.initialCollateralToken == wnt) {
+                if (initialCollateralDeltaAmount < params.numbers.executionFee) {
+                    revert Errors.InsufficientWntAmountForExecutionFee(initialCollateralDeltaAmount, params.numbers.executionFee);
                 }
-                cache.initialCollateralDeltaAmount -= params.numbers.executionFee;
-                cache.shouldRecordSeparateExecutionFeeTransfer = false;
+                // 保证金为扣除执行费后的金额
+                initialCollateralDeltaAmount -= params.numbers.executionFee;
+                // 不再需要单独处理转移保证金
+                shouldRecordSeparateExecutionFeeTransfer = false;
             }
         } else if (
             params.orderType == Order.OrderType.MarketDecrease ||
             params.orderType == Order.OrderType.LimitDecrease ||
             params.orderType == Order.OrderType.StopLossDecrease
         ) {
-            // for decrease orders, the initialCollateralDeltaAmount is based on the passed in value
-            cache.initialCollateralDeltaAmount = params.numbers.initialCollateralDeltaAmount;
+            // 如果是 减仓/平仓/止盈/止损订单, 保证金直接使用传参的指
+            initialCollateralDeltaAmount = params.numbers.initialCollateralDeltaAmount;
         } else {
             revert Errors.OrderTypeCannotBeCreated(uint256(params.orderType));
         }
 
-        if (cache.shouldRecordSeparateExecutionFeeTransfer) {
-            uint256 wntAmount = orderVault.recordTransferIn(cache.wnt);
+        // 如果需要单独处理执行费, 即用户的保证金不是原声代币
+        if (shouldRecordSeparateExecutionFeeTransfer) {
+            // 从orderVault取出用户传入的原生代币
+            uint256 wntAmount = orderVault.recordTransferIn(wnt);
+            // 校验执行费用
             if (wntAmount < params.numbers.executionFee) {
                 revert Errors.InsufficientWntAmountForExecutionFee(wntAmount, params.numbers.executionFee);
             }
@@ -119,17 +119,17 @@ library OrderUtils {
             params.numbers.executionFee = wntAmount;
         }
 
+        // 4. 校验交易对是否支持合约交易, 验证 swap 路径是否正确
+        // 如果是合约交易
         if (BaseOrderUtils.isPositionOrder(params.orderType)) {
+            // 判断该交易对是否支持合约交易
             MarketUtils.validatePositionMarket(dataStore, params.addresses.market);
         }
 
-        if (BaseOrderUtils.isMarketOrder(params.orderType) && params.numbers.validFromTime != 0) {
-            revert Errors.UnexpectedValidFromTime(uint256(params.orderType));
-        }
-
-        // validate swap path markets
+        // 验证 swap 路径是否正确
         MarketUtils.validateSwapPath(dataStore, params.addresses.swapPath);
 
+        // 5. 构建订单对象
         Order.Props memory order;
 
         order.setAccount(account);
@@ -143,50 +143,46 @@ library OrderUtils {
         order.setOrderType(params.orderType);
         order.setDecreasePositionSwapType(params.decreasePositionSwapType);
         order.setSizeDeltaUsd(params.numbers.sizeDeltaUsd);
-        order.setInitialCollateralDeltaAmount(cache.initialCollateralDeltaAmount);
+        order.setInitialCollateralDeltaAmount(initialCollateralDeltaAmount);
         order.setTriggerPrice(params.numbers.triggerPrice);
         order.setAcceptablePrice(params.numbers.acceptablePrice);
+        order.setExecutionFee(params.numbers.executionFee);
         order.setCallbackGasLimit(params.numbers.callbackGasLimit);
         order.setMinOutputAmount(params.numbers.minOutputAmount);
-        order.setValidFromTime(params.numbers.validFromTime);
         order.setIsLong(params.isLong);
         order.setShouldUnwrapNativeToken(params.shouldUnwrapNativeToken);
         order.setAutoCancel(params.autoCancel);
 
+        // 6. 校验接收者地址
         AccountUtils.validateReceiver(order.receiver());
         if (order.cancellationReceiver() == address(orderVault)) {
             // revert as funds cannot be sent back to the order vault
             revert Errors.InvalidReceiver(order.cancellationReceiver());
         }
 
+        // 7. 校验gas限制和执行费是否足够
         CallbackUtils.validateCallbackGasLimit(dataStore, order.callbackGasLimit());
 
-        cache.estimatedGasLimit = GasUtils.estimateExecuteOrderGasLimit(dataStore, order);
-        cache.oraclePriceCount = GasUtils.estimateOrderOraclePriceCount(params.addresses.swapPath.length);
-        uint256 executionFee;
-        (executionFee, cache.executionFeeDiff) = GasUtils.validateAndCapExecutionFee(
-            dataStore,
-            cache.estimatedGasLimit,
-            params.numbers.executionFee,
-            cache.oraclePriceCount,
-            shouldCapMaxExecutionFee
-        );
-        order.setExecutionFee(executionFee);
+        uint256 estimatedGasLimit = GasUtils.estimateExecuteOrderGasLimit(dataStore, order);
+        uint256 oraclePriceCount = GasUtils.estimateOrderOraclePriceCount(params.addresses.swapPath.length);
+        GasUtils.validateExecutionFee(dataStore, estimatedGasLimit, order.executionFee(), oraclePriceCount);
 
-        if (cache.executionFeeDiff != 0) {
-            GasUtils.transferExcessiveExecutionFee(dataStore, eventEmitter, orderVault, order.account(), cache.executionFeeDiff);
-        }
-
+        // 8. 生成订单 Key 并存入OrderStore
         bytes32 key = NonceUtils.getNextKey(dataStore);
 
+        // 记录生成订单的区块高度和时间戳
         order.touch();
 
         BaseOrderUtils.validateNonEmptyOrder(order);
+        // 存入OrderStore
         OrderStoreUtils.set(dataStore, key, order);
 
+        // 9. 注册订单到自动取消列表
         updateAutoCancelList(dataStore, key, order, order.autoCancel());
+        // 校验自动取消时的回调函数执行gas限制
         validateTotalCallbackGasLimitForAutoCancelOrders(dataStore, order);
 
+        // 10. 触发创建订单事件
         OrderEventUtils.emitOrderCreated(eventEmitter, key, order);
 
         return key;
@@ -207,12 +203,6 @@ library OrderUtils {
 
         Order.Props memory order = OrderStoreUtils.get(params.dataStore, params.key);
         BaseOrderUtils.validateNonEmptyOrder(order);
-
-        // this could happen if the order was created in new contracts that support new order types
-        // but the order is being cancelled in old contracts
-        if (!BaseOrderUtils.isSupportedOrder(order.orderType())) {
-            revert Errors.UnsupportedOrderType(uint256(order.orderType()));
-        }
 
         OrderStoreUtils.remove(params.dataStore, params.key, order.account());
 
@@ -297,7 +287,13 @@ library OrderUtils {
         order.setIsFrozen(true);
         OrderStoreUtils.set(dataStore, key, order);
 
-        OrderEventUtils.emitOrderFrozen(eventEmitter, key, order.account(), reason, reasonBytes);
+        OrderEventUtils.emitOrderFrozen(
+            eventEmitter,
+            key,
+            order.account(),
+            reason,
+            reasonBytes
+        );
 
         EventUtils.EventLogData memory eventData;
         CallbackUtils.afterOrderFrozen(key, order, eventData);
@@ -342,14 +338,10 @@ library OrderUtils {
         }
     }
 
-    function updateAutoCancelList(
-        DataStore dataStore,
-        bytes32 orderKey,
-        Order.Props memory order,
-        bool shouldAdd
-    ) internal {
+    function updateAutoCancelList(DataStore dataStore, bytes32 orderKey, Order.Props memory order, bool shouldAdd) internal {
         if (
-            order.orderType() != Order.OrderType.LimitDecrease && order.orderType() != Order.OrderType.StopLossDecrease
+            order.orderType() != Order.OrderType.LimitDecrease &&
+            order.orderType() != Order.OrderType.StopLossDecrease
         ) {
             return;
         }
@@ -363,12 +355,10 @@ library OrderUtils {
         }
     }
 
-    function validateTotalCallbackGasLimitForAutoCancelOrders(
-        DataStore dataStore,
-        Order.Props memory order
-    ) internal view {
+    function validateTotalCallbackGasLimitForAutoCancelOrders(DataStore dataStore, Order.Props memory order) internal view {
         if (
-            order.orderType() != Order.OrderType.LimitDecrease && order.orderType() != Order.OrderType.StopLossDecrease
+            order.orderType() != Order.OrderType.LimitDecrease &&
+            order.orderType() != Order.OrderType.StopLossDecrease
         ) {
             return;
         }
@@ -382,16 +372,15 @@ library OrderUtils {
         }
     }
 
-    function getTotalCallbackGasLimitForAutoCancelOrders(
-        DataStore dataStore,
-        bytes32 positionKey
-    ) internal view returns (uint256) {
+    function getTotalCallbackGasLimitForAutoCancelOrders(DataStore dataStore, bytes32 positionKey) internal view returns (uint256) {
         bytes32[] memory orderKeys = AutoCancelUtils.getAutoCancelOrderKeys(dataStore, positionKey);
 
         uint256 total;
 
         for (uint256 i; i < orderKeys.length; i++) {
-            total += dataStore.getUint(keccak256(abi.encode(orderKeys[i], OrderStoreUtils.CALLBACK_GAS_LIMIT)));
+            total += dataStore.getUint(
+                keccak256(abi.encode(orderKeys[i], OrderStoreUtils.CALLBACK_GAS_LIMIT))
+            );
         }
 
         return total;

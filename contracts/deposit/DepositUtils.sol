@@ -72,24 +72,28 @@ library DepositUtils {
         address account,
         CreateDepositParams memory params
     ) external returns (bytes32) {
+        // 1. 账户验证
         AccountUtils.validateAccount(account);
-
+        // 2. 校验交易对是否已启动, 验证 swap 路径是否正确
         Market.Props memory market = MarketUtils.getEnabledMarket(dataStore, params.market);
         MarketUtils.validateSwapPath(dataStore, params.longTokenSwapPath);
         MarketUtils.validateSwapPath(dataStore, params.shortTokenSwapPath);
 
-        // if the initialLongToken and initialShortToken are the same, only the initialLongTokenAmount would
-        // be non-zero, the initialShortTokenAmount would be zero
+        // 3. 记录用户转入的多头代币和空头代币数量
+        // 如果 initialLongToken 和 initialShortToken 相同，则只有 initialLongTokenAmount 非零
         uint256 initialLongTokenAmount = depositVault.recordTransferIn(params.initialLongToken);
         uint256 initialShortTokenAmount = depositVault.recordTransferIn(params.initialShortToken);
-
+    
         address wnt = TokenUtils.wnt(dataStore);
-
+        // 4. 处理执行费用,并计算实际存入token数量
         if (params.initialLongToken == wnt) {
+            // 如果多头代币是原生代币, 则从存入的多头代币数量中扣除执行费
             initialLongTokenAmount -= params.executionFee;
         } else if (params.initialShortToken == wnt) {
+            // 如果空头代币是原生代币, 也要扣掉执行费
             initialShortTokenAmount -= params.executionFee;
         } else {
+            // 如果没有存入原生代币提供流动性, 则校验执行费用是否正确
             uint256 wntAmount = depositVault.recordTransferIn(wnt);
             if (wntAmount < params.executionFee) {
                 revert Errors.InsufficientWntAmountForExecutionFee(wntAmount, params.executionFee);
@@ -98,12 +102,15 @@ library DepositUtils {
             params.executionFee = wntAmount;
         }
 
+        // 校验存入的多头和空头金额, 确认不是 空单
         if (initialLongTokenAmount == 0 && initialShortTokenAmount == 0) {
             revert Errors.EmptyDepositAmounts();
         }
 
+        // 校验流动性证明接收地址
         AccountUtils.validateReceiver(params.receiver);
 
+        // 6. 创建创建添加流动性订单
         Deposit.Props memory deposit = Deposit.Props(
             Deposit.Addresses(
                 account,
@@ -130,6 +137,7 @@ library DepositUtils {
             )
         );
 
+        // 7. 校验回调方法和 执行费用
         CallbackUtils.validateCallbackGasLimit(dataStore, deposit.callbackGasLimit());
 
         uint256 estimatedGasLimit = GasUtils.estimateExecuteDepositGasLimit(dataStore, deposit);
@@ -138,10 +146,12 @@ library DepositUtils {
         );
         GasUtils.validateExecutionFee(dataStore, estimatedGasLimit, params.executionFee, oraclePriceCount);
 
+        // 8. 保存订单到depositVault
         bytes32 key = NonceUtils.getNextKey(dataStore);
 
         DepositStoreUtils.set(dataStore, key, deposit);
 
+        // 9. 触发事件
         DepositEventUtils.emitDepositCreated(eventEmitter, key, deposit, DepositType.Normal);
 
         return key;

@@ -875,6 +875,7 @@ library MarketUtils {
         address market,
         int256 delta
     ) internal returns (uint256) {
+        // 更新仓位影响池的余额
         uint256 nextValue = dataStore.applyBoundedDeltaToUint(
             Keys.positionImpactPoolAmountKey(market),
             delta
@@ -1000,8 +1001,10 @@ library MarketUtils {
         Market.Props memory market,
         MarketPrices memory prices
     ) external {
+        // 计算资金费率的增量，并更新资金费率记录。
         GetNextFundingAmountPerSizeResult memory result = getNextFundingAmountPerSize(dataStore, market, prices);
 
+        // 应用资金费率变化到市场
         applyDeltaToFundingFeeAmountPerSize(
             dataStore,
             eventEmitter,
@@ -1090,6 +1093,7 @@ library MarketUtils {
         Market.Props memory market,
         MarketPrices memory prices
     ) internal view returns (GetNextFundingAmountPerSizeResult memory) {
+        // 基于市场持仓情况 计算 资金费率变化量，并存储在 result.fundingFeeAmountPerSizeDelta 中。
         GetNextFundingAmountPerSizeResult memory result;
         GetNextFundingAmountPerSizeCache memory cache;
 
@@ -2466,8 +2470,10 @@ library MarketUtils {
         EventEmitter eventEmitter,
         address market
     ) external {
+        // 获取待分配金额 和 分配后的余额
         (uint256 distributionAmount, uint256 nextPositionImpactPoolAmount) = getPendingPositionImpactPoolDistributionAmount(dataStore, market);
 
+        // 如果待分配金额不为零，执行分配
         if (distributionAmount != 0) {
             applyDeltaToPositionImpactPool(
                 dataStore,
@@ -2476,6 +2482,7 @@ library MarketUtils {
                 -distributionAmount.toInt256()
             );
 
+            // 触发事件
             MarketEventUtils.emitPositionImpactPoolDistributed(
                 eventEmitter,
                 market,
@@ -2484,6 +2491,7 @@ library MarketUtils {
             );
         }
 
+        // 记录最近一次分配时间
         dataStore.setUint(Keys.positionImpactPoolDistributedAtKey(market), Chain.currentTimestamp());
     }
 
@@ -2501,24 +2509,26 @@ library MarketUtils {
         DataStore dataStore,
         address market
     ) internal view returns (uint256, uint256) {
+        // 获取当前仓位影响池的余额
         uint256 positionImpactPoolAmount = getPositionImpactPoolAmount(dataStore, market);
         if (positionImpactPoolAmount == 0) { return (0, positionImpactPoolAmount); }
-
+        // 获取分配速率
         uint256 distributionRate = dataStore.getUint(Keys.positionImpactPoolDistributionRateKey(market));
         if (distributionRate == 0) { return (0, positionImpactPoolAmount); }
-
+        // 获取最小余额
         uint256 minPositionImpactPoolAmount = dataStore.getUint(Keys.minPositionImpactPoolAmountKey(market));
         if (positionImpactPoolAmount <= minPositionImpactPoolAmount) { return (0, positionImpactPoolAmount); }
-
+        // 计算最大可分配金额
         uint256 maxDistributionAmount = positionImpactPoolAmount - minPositionImpactPoolAmount;
-
+        // 获取分配间隔
         uint256 durationInSeconds = getSecondsSincePositionImpactPoolDistributed(dataStore, market);
+        // 计算实际分配金额
         uint256 distributionAmount = Precision.applyFactor(durationInSeconds, distributionRate);
 
         if (distributionAmount > maxDistributionAmount) {
             distributionAmount = maxDistributionAmount;
         }
-
+        // 返回待分配金额和分配后的余额
         return (distributionAmount, positionImpactPoolAmount - distributionAmount);
     }
 

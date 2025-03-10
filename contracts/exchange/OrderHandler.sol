@@ -197,7 +197,7 @@ contract OrderHandler is IOrderHandler, BaseOrderHandler {
         withOraclePrices(oracleParams)
     {
         uint256 startingGas = gasleft();
-
+        // 获取订单信息, 校验当前gas是否足够
         Order.Props memory order = OrderStoreUtils.get(dataStore, key);
         uint256 estimatedGasLimit = GasUtils.estimateExecuteOrderGasLimit(dataStore, order);
         GasUtils.validateExecutionGas(dataStore, startingGas, estimatedGasLimit);
@@ -226,6 +226,7 @@ contract OrderHandler is IOrderHandler, BaseOrderHandler {
     ) external onlySelf {
         uint256 startingGas = gasleft();
 
+        // 获取执行订单需要的参数
         BaseOrderUtils.ExecuteOrderParams memory params = _getExecuteOrderParams(
             key,
             order,
@@ -237,10 +238,12 @@ contract OrderHandler is IOrderHandler, BaseOrderHandler {
         // which would automatically cause the order to be frozen
         // limit increase and limit / trigger decrease orders may fail due to output amount as well and become frozen
         // but only if their acceptablePrice is reached
+        // 验证订单是否为冻结订单或限价swap订单，并检查 Keeper 权限
         if (params.order.isFrozen() || params.order.orderType() == Order.OrderType.LimitSwap) {
             _validateFrozenOrderKeeper(keeper);
         }
 
+        // 验证订单类型是否可用
         FeatureUtils.validateFeature(params.contracts.dataStore, Keys.executeOrderFeatureDisabledKey(address(this), uint256(params.order.orderType())));
 
         ExecuteOrderUtils.executeOrder(params);

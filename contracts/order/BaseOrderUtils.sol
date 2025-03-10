@@ -170,6 +170,8 @@ library BaseOrderUtils {
         uint256 triggerPrice,
         bool isLong
     ) internal view {
+        // 对于 交换订单（Swap Order）、市价单（Market Order） 和 清算订单（Liquidation Order）
+        // 这些订单类型的执行不依赖于触发价格，直接返回，无需验证触发价格。
         if (
             isSwapOrder(orderType) ||
             isMarketOrder(orderType) ||
@@ -178,6 +180,7 @@ library BaseOrderUtils {
             return;
         }
 
+        // (从临时的缓存中)获取要交易的token市价
         Price.Props memory primaryPrice = oracle.getPrimaryPrice(indexToken);
 
         // for limit increase long positions:
@@ -187,6 +190,8 @@ library BaseOrderUtils {
         //      - the order should be executed when the oracle price is >= triggerPrice
         //      - primaryPrice.min should be used for the oracle price
         if (orderType == Order.OrderType.LimitIncrease) {
+            // 多头订单加仓, 可看做买入行为, 如果 max(最低卖出) <= 订单触发价, 即由卖家愿意以 当前订单报价或更低价格卖出, 订单可成功买入
+            // 空头订单加仓, 可看作卖出行为, 如果 min(最高买入) >= 订单触发价, 即有买家愿意以 当前订单报价或更高价格买入, 订单可成功卖出
             bool ok = isLong ? primaryPrice.max <= triggerPrice : primaryPrice.min >= triggerPrice;
 
             if (!ok) {
@@ -203,6 +208,8 @@ library BaseOrderUtils {
         //      - the order should be executed when the oracle price is <= triggerPrice
         //      - primaryPrice.max should be used for the oracle price
         if (orderType == Order.OrderType.LimitDecrease) {
+            // 多头订单减仓, 可看作 卖出, 如果 min(最高买入) price >= 订单触发价, 即 有买家愿意以 当前订单报价或更高买入
+            // 空头订单加仓, 可看作 买入, 如果 max(最低卖出) price <= 订单触发价, 即 有卖家愿意以 当前加单报价或更低卖出
             bool ok = isLong ? primaryPrice.min >= triggerPrice : primaryPrice.max <= triggerPrice;
 
             if (!ok) {

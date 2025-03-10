@@ -124,6 +124,8 @@ contract Oracle is RoleModule {
     // @dev set the primary price
     // @param token the token to set the price for
     // @param price the price value to set to
+    // primaryPrice会在当前交易执行完后被清除
+    // 可以理解为生命周期为 一次会话 的上下文环境
     function setPrimaryPrice(address token, Price.Props memory price) external onlyController {
         _setPrimaryPrice(token, price);
     }
@@ -333,9 +335,12 @@ contract Oracle is RoleModule {
         uint256 refPrice,
         uint256 maxRefPriceDeviationFactor
     ) internal pure {
+        // 取两个价格差(绝对值)
         uint256 diff = Calc.diff(price, refPrice);
+        // 计算差异百分比
         uint256 diffFactor = Precision.toFactor(diff, refPrice);
 
+        // 判断差异百分比是否超过配置的能接受的范围
         if (diffFactor > maxRefPriceDeviationFactor) {
             revert Errors.MaxRefPriceDeviationExceeded(
                 token,

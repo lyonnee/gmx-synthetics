@@ -127,21 +127,21 @@ library GasUtils {
         uint256 gasUsed = startingGas - gasleft();
 
         // each external call forwards 63/64 of the remaining gas
+        // 调用 adjustGasUsage 函数，根据 Gas 使用量和预言机价格请求次数调整 Gas 使用量
         uint256 executionFeeForKeeper = adjustGasUsage(dataStore, gasUsed, oraclePriceCount) * tx.gasprice;
 
         if (executionFeeForKeeper > executionFee) {
             executionFeeForKeeper = executionFee;
         }
 
-        bank.transferOutNativeToken(
-            keeper,
-            executionFeeForKeeper
-        );
+        // 将 executionFeeForKeeper 支付给 Keeper
+        bank.transferOutNativeToken(keeper, executionFeeForKeeper);
 
         emitKeeperExecutionFee(eventEmitter, keeper, executionFeeForKeeper);
 
         PayExecutionFeeCache memory cache;
 
+        // 计算退款金额
         cache.refundFeeAmount = executionFee - executionFeeForKeeper;
         if (cache.refundFeeAmount == 0) {
             return;
@@ -158,11 +158,21 @@ library GasUtils {
 
         EventUtils.EventLogData memory eventData;
 
-        cache.refundWasSent = CallbackUtils.refundExecutionFee(dataStore, key, callbackContract, cache.refundFeeAmount, eventData);
+        // 如果存在回调合约，将退款金额发送给回调合约
+        cache.refundWasSent = CallbackUtils.refundExecutionFee(
+            dataStore,
+            key,
+            callbackContract,
+            cache.refundFeeAmount,
+            eventData
+        );
 
         if (cache.refundWasSent) {
+            // 如果成功转账给了回调合约, 触发事件
             emitExecutionFeeRefundCallback(eventEmitter, callbackContract, cache.refundFeeAmount);
         } else {
+            // 如果没有设置回调合约, 或则毁掉合约无法接收转账
+            // 将退款金额发送给 refundReceiver
             TokenUtils.sendNativeToken(dataStore, refundReceiver, cache.refundFeeAmount);
             emitExecutionFeeRefund(eventEmitter, refundReceiver, cache.refundFeeAmount);
         }
@@ -251,15 +261,24 @@ library GasUtils {
     // @dev the estimated gas limit for deposits
     // @param dataStore DataStore
     // @param deposit the deposit to estimate the gas limit for
-    function estimateExecuteDepositGasLimit(DataStore dataStore, Deposit.Props memory deposit) internal view returns (uint256) {
+    function estimateExecuteDepositGasLimit(
+        DataStore dataStore,
+        Deposit.Props memory deposit
+    ) internal view returns (uint256) {
+        // 单次swap的gas limit, 部署合约时配置的, 通过调用dataStore.getUint(Keys.singleSwapGasLimitKey())查询得到, GMX配置的值是1_000_000
         uint256 gasPerSwap = dataStore.getUint(Keys.singleSwapGasLimitKey());
+        // swapCount = 多头代币的swap路径数 + 空头代币的swap路径数
+        // 例如: 当用户给 ETH/USDC市场添加流动性, 多头代币使用原生ETH, 空头代币使用USDC, 这个时候不需要swap,那么这个值就是 0
+        // 例如: 当用户给 ETH/USDC市场添加流动性, 多头代币使用AVAX, 空头代币使用USDC, 此时AVAX需要swap成ETH, 路径可能为[AVAX,USDC,ETH], 这值为 3
         uint256 swapCount = deposit.longTokenSwapPath().length + deposit.shortTokenSwapPath().length;
+        // 输入资产swap的gas limit总和
         uint256 gasForSwaps = swapCount * gasPerSwap;
 
         if (deposit.initialLongTokenAmount() == 0 || deposit.initialShortTokenAmount() == 0) {
             return dataStore.getUint(Keys.depositGasLimitKey(true)) + deposit.callbackGasLimit() + gasForSwaps;
         }
 
+        // dataStore.getUint(Keys.depositGasLimitKey()) 部署合约是配置的, GMX配置的值是1_800_000
         return dataStore.getUint(Keys.depositGasLimitKey(false)) + deposit.callbackGasLimit() + gasForSwaps;
     }
 

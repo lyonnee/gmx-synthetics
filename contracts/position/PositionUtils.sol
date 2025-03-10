@@ -492,6 +492,9 @@ library PositionUtils {
         return (willBeSufficient, remainingCollateralUsd);
     }
 
+    // 这个方法在每次订单执行前后都会被调用，确保市场的资金费率 & 借贷利率是最新的
+    // 资金费率（Funding Rate）用于平衡多空持仓，防止市场极端不平衡
+    // 借贷利率（Borrowing Rate）用于补偿流动性提供者（LP），保证市场流动性
     function updateFundingAndBorrowingState(
         DataStore dataStore,
         EventEmitter eventEmitter,

@@ -15,8 +15,8 @@ contract ChainlinkDataStreamProvider is IOracleProvider {
     address public immutable oracle;
     IChainlinkDataStreamVerifier public immutable verifier;
 
-    // bid: min price, highest buy price
-    // ask: max price, lowest sell price
+    // bid: min price, highest buy price // 最低卖出价（min price）, 也是买家愿意支付的最高价格
+    // ask: max price, lowest sell price // 最高买入价（max price）, 也是卖家愿意接受的最低价格
     struct Report {
         bytes32 feedId; // The feed ID the report has data for
         uint32 validFromTimestamp; // Earliest timestamp for which price is applicable

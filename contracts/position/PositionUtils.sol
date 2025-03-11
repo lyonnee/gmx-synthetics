@@ -501,7 +501,7 @@ library PositionUtils {
         Market.Props memory market,
         MarketUtils.MarketPrices memory prices
     ) external {
-        // update the funding amount per size for the market
+        // 更新市场每种规模的资金费状态
         MarketUtils.updateFundingState(
             dataStore,
             eventEmitter,
@@ -509,7 +509,7 @@ library PositionUtils {
             prices
         );
 
-        // update the cumulative borrowing factor for longs
+        // 更新多头借贷费系数
         MarketUtils.updateCumulativeBorrowingFactor(
             dataStore,
             eventEmitter,
@@ -518,7 +518,7 @@ library PositionUtils {
             true // isLong
         );
 
-        // update the cumulative borrowing factor for shorts
+        // 更新空头借贷费系数
         MarketUtils.updateCumulativeBorrowingFactor(
             dataStore,
             eventEmitter,

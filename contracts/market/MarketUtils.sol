@@ -496,6 +496,7 @@ library MarketUtils {
         return dataStore.getUint(Keys.maxPoolUsdForDepositKey(market, token));
     }
 
+    // 计算当前市场资金利用率
     function getUsageFactor(
         DataStore dataStore,
         Market.Props memory market,
@@ -1004,7 +1005,8 @@ library MarketUtils {
         // 计算资金费率的增量，并更新资金费率记录。
         GetNextFundingAmountPerSizeResult memory result = getNextFundingAmountPerSize(dataStore, market, prices);
 
-        // 应用资金费率变化到市场
+        // 应用资金费率变化到市场这里是给多头和空头的不同质押资产分别应用资金费变化
+        // 资金费调整是基于持仓大小计算的，如果市场上多头持仓远高于空头，多头需要支付资金费给空头，反之亦然。
         applyDeltaToFundingFeeAmountPerSize(
             dataStore,
             eventEmitter,
@@ -1734,6 +1736,7 @@ library MarketUtils {
     // @param market the market to check
     // @param prices the prices of the market tokens
     // @param isLong whether to get the value for the long or short side
+    // 已被仓位占用的资金总额（多头+空头）
     function getReservedUsd(
         DataStore dataStore,
         Market.Props memory market,
@@ -2139,6 +2142,7 @@ library MarketUtils {
     ) internal {
         if (delta == 0) { return; }
 
+        // 如果 delta > 0，表示资金费有变化，更新 dataStore
         uint256 nextValue = dataStore.applyDeltaToUint(
             Keys.fundingFeeAmountPerSizeKey(market, collateralToken, isLong),
             delta
@@ -2360,12 +2364,14 @@ library MarketUtils {
     // @param market the market to get the borrowing factor per second for
     // @param prices the prices of the market tokens
     // @param isLong whether to get the factor for the long or short side
+    // 基于线性模型计算的借贷因子
     function getBorrowingFactorPerSecond(
         DataStore dataStore,
         Market.Props memory market,
         MarketPrices memory prices,
         bool isLong
     ) internal view returns (uint256) {
+        // 已被仓位占用的资金总额（多头+空头）
         uint256 reservedUsd = getReservedUsd(
             dataStore,
             market,
@@ -2378,6 +2384,7 @@ library MarketUtils {
         // check if the borrowing fee for the smaller side should be skipped
         // if skipBorrowingFeeForSmallerSide is true, and the longOpenInterest is exactly the same as the shortOpenInterest
         // then the borrowing fee would be charged for both sides, this should be very rare
+        // 如果启用此选项，持仓较小的一侧免收借贷费，鼓励市场平衡。
         bool skipBorrowingFeeForSmallerSide = dataStore.getBool(Keys.SKIP_BORROWING_FEE_FOR_SMALLER_SIDE);
         if (skipBorrowingFeeForSmallerSide) {
             uint256 longOpenInterest = getOpenInterest(dataStore, market, true);
@@ -2396,6 +2403,7 @@ library MarketUtils {
             }
         }
 
+        // 获取 流动性池中可用的资金，不含未实现盈亏
         uint256 poolUsd = getPoolUsdWithoutPnl(dataStore, market, prices, isLong, false);
 
         if (poolUsd == 0) {
@@ -2416,6 +2424,7 @@ library MarketUtils {
         }
 
         uint256 borrowingExponentFactor = getBorrowingExponentFactor(dataStore, market.marketToken, isLong);
+        // 计算借贷费用时，reservedUsd 经过 指数因子（borrowingExponentFactor） 调整后的值
         uint256 reservedUsdAfterExponent = Precision.applyExponentFactor(reservedUsd, borrowingExponentFactor);
 
         uint256 reservedUsdToPoolFactor = Precision.toFactor(reservedUsdAfterExponent, poolUsd);
@@ -2424,6 +2433,7 @@ library MarketUtils {
         return Precision.applyFactor(reservedUsdToPoolFactor, borrowingFactor);
     }
 
+    // 基于拐点模型的借贷因子结算公式
     function getKinkBorrowingFactor(
         DataStore dataStore,
         Market.Props memory market,
@@ -2432,6 +2442,7 @@ library MarketUtils {
         uint256 poolUsd,
         uint256 optimalUsageFactor
     ) internal view returns (uint256) {
+        // // 计算当前市场资金利用率
         uint256 usageFactor = getUsageFactor(
             dataStore,
             market,
@@ -2440,13 +2451,17 @@ library MarketUtils {
             poolUsd
         );
 
+        // 基础借贷费率，用于计算线性部分
         uint256 baseBorrowingFactor = dataStore.getUint(Keys.baseBorrowingFactorKey(market.marketToken, isLong));
 
+        // 借贷费随 usageFactor 线性增长
         uint256 borrowingFactorPerSecond = Precision.applyFactor(
             usageFactor,
             baseBorrowingFactor
         );
 
+        // 当资金高于最佳利用率(optimalUsageFactor)时
+        // 借贷费率陡增，防止池子被耗尽
         if (usageFactor > optimalUsageFactor && Precision.FLOAT_PRECISION > optimalUsageFactor) {
             uint256 diff = usageFactor - optimalUsageFactor;
 
@@ -2454,6 +2469,7 @@ library MarketUtils {
             uint256 additionalBorrowingFactorPerSecond;
 
             if (aboveOptimalUsageBorrowingFactor > baseBorrowingFactor) {
+                // 超过最优使用率后的借贷费率
                 additionalBorrowingFactorPerSecond = aboveOptimalUsageBorrowingFactor - baseBorrowingFactor;
             }
 

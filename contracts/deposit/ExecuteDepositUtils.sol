@@ -519,6 +519,7 @@ library ExecuteDepositUtils {
             marketTokensSupply
         );
 
+        // 存入市场流动性池，并更新 dataStore 中的池子状态
         MarketUtils.applyDeltaToPoolAmount(
             params.dataStore,
             params.eventEmitter,
@@ -527,6 +528,7 @@ library ExecuteDepositUtils {
             (fees.amountAfterFees + fees.feeAmountForPool).toInt256()
         );
 
+        //  检查池子中的流动性是否足够，不足则拒绝存款
         MarketUtils.validatePoolUsdForDeposit(
             params.dataStore,
             _params.market,
@@ -534,12 +536,14 @@ library ExecuteDepositUtils {
             _params.tokenInPrice.max
         );
 
+        // 检查流动性池中的代币余额，防止存款过多导致不平衡
         MarketUtils.validatePoolAmount(
             params.dataStore,
             _params.market,
             _params.tokenIn
         );
 
+        // 增发market token 并发送给用户
         MarketToken(payable(_params.market.marketToken)).mint(_params.receiver, mintAmount);
 
         return mintAmount;

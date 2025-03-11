@@ -316,6 +316,7 @@ library PositionUtils {
         IsPositionLiquidatableCache memory cache;
         IsPositionLiquidatableInfo memory info;
 
+        // 计算仓位的盈亏(PnL) 以USD为单位
         (cache.positionPnlUsd, /* int256 uncappedBasePnlUsd */,  /* uint256 sizeDeltaInTokens */) = getPositionPnlUsd(
             dataStore,
             market,
@@ -324,14 +325,17 @@ library PositionUtils {
             position.sizeInUsd()
         );
 
+        // 获取抵押品当前的价格
         cache.collateralTokenPrice = MarketUtils.getCachedTokenPrice(
             position.collateralToken(),
             market,
             prices
         );
 
+        // 计算抵押品当前的总USD价值
         cache.collateralUsd = position.collateralAmount() * cache.collateralTokenPrice.min;
 
+        // 计算完全平仓时的价格影响
         // calculate the usdDeltaForPriceImpact for fully closing the position
         cache.usdDeltaForPriceImpact = -position.sizeInUsd().toInt256();
 
@@ -368,6 +372,7 @@ library PositionUtils {
             }
         }
 
+        // 调用 getPositionFees 函数，计算仓位的费用（如交易费、资金费率等）
         PositionPricingUtils.GetPositionFeesParams memory getPositionFeesParams = PositionPricingUtils.GetPositionFeesParams(
             dataStore, // dataStore
             referralStorage, // referralStorage
@@ -390,11 +395,13 @@ library PositionUtils {
         // the position's pnl is counted as collateral for the liquidation check
         // as a position in profit should not be liquidated if the pnl is sufficient
         // to cover the position's fees
+        // 剩余抵押品(仓位净值)的计算
         info.remainingCollateralUsd =
-            cache.collateralUsd.toInt256()
-            + cache.positionPnlUsd
-            + cache.priceImpactUsd
-            - collateralCostUsd.toInt256();
+            cache.collateralUsd.toInt256()  // 抵押品总价值
+            + cache.positionPnlUsd          // 仓位盈亏
+            + cache.priceImpactUsd          // 仓位价格影响
+            - collateralCostUsd.toInt256(); // 其他费用
+
 
         cache.minCollateralFactor = MarketUtils.getMinCollateralFactor(dataStore, market.marketToken);
 
@@ -404,6 +411,7 @@ library PositionUtils {
         info.minCollateralUsdForLeverage = Precision.applyFactor(position.sizeInUsd(), cache.minCollateralFactor).toInt256();
 
         if (shouldValidateMinCollateralUsd) {
+            // 验证剩余抵押品是否低于系统要求的最小值（MIN_COLLATERAL_USD）
             info.minCollateralUsd = dataStore.getUint(Keys.MIN_COLLATERAL_USD).toInt256();
             if (info.remainingCollateralUsd < info.minCollateralUsd) {
                 return (true, "min collateral", info);
@@ -414,6 +422,7 @@ library PositionUtils {
             return (true, "< 0", info);
         }
 
+        // 如果剩余抵押品低于杠杆要求，则仓位可清算
         if (info.remainingCollateralUsd < info.minCollateralUsdForLeverage) {
             return (true, "min collateral for leverage", info);
         }
@@ -441,6 +450,7 @@ library PositionUtils {
     // since some time would be required for the funding fees to accumulate
     //
     // fees and price impact are validated in the validatePosition check
+    // 预测部分平仓后剩余仓位的抵押是否足够
     function willPositionCollateralBeSufficient(
         DataStore dataStore,
         Market.Props memory market,
@@ -473,6 +483,7 @@ library PositionUtils {
         // the position's pnl is not factored into the remainingCollateralUsd value, since
         // factoring in a positive pnl may allow the user to manipulate price and bypass this check
         // it may be useful to factor in a negative pnl for this check, this can be added if required
+        // 基于市场未平仓量动态调整得到的动态计算因子
         uint256 minCollateralFactor = MarketUtils.getMinCollateralFactorForOpenInterest(
             dataStore,
             market,

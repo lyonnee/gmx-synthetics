@@ -48,6 +48,7 @@ contract LiquidationHandler is BaseOrderHandler {
     {
         uint256 startingGas = gasleft();
 
+        // 校验L2的sequencer节点是否在线
         oracle.validateSequencerUp();
 
         bytes32 key = LiquidationUtils.createLiquidationOrder(
@@ -61,6 +62,7 @@ contract LiquidationHandler is BaseOrderHandler {
 
         Order.Props memory order = OrderStoreUtils.get(dataStore, key);
 
+        // 构建清算订单的执行参数
         BaseOrderUtils.ExecuteOrderParams memory params = _getExecuteOrderParams(
             key,
             order,
@@ -71,6 +73,7 @@ contract LiquidationHandler is BaseOrderHandler {
 
         FeatureUtils.validateFeature(params.contracts.dataStore, Keys.executeOrderFeatureDisabledKey(address(this), uint256(params.order.orderType())));
 
+        // 执行清算业务逻辑
         ExecuteOrderUtils.executeOrder(params);
     }
 }

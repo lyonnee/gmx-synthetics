@@ -110,6 +110,7 @@ library DecreasePositionUtils {
 
         // if the position will be partially decreased then do a check on the
         // remaining collateral amount and update the order attributes if needed
+        // 订单大小限制：若订单大小超过仓位大小，自动修正为最大可平仓量（针对限价单和止损单）
         if (params.order.sizeDeltaUsd() < params.position.sizeInUsd()) {
             // estimate pnl based on indexTokenPrice
             (cache.estimatedPositionPnlUsd, /* int256 uncappedBasePnlUsd */,  /* uint256 sizeDeltaInTokens */) = PositionUtils.getPositionPnlUsd(
@@ -123,6 +124,7 @@ library DecreasePositionUtils {
             cache.estimatedRealizedPnlUsd = Precision.mulDiv(cache.estimatedPositionPnlUsd, params.order.sizeDeltaUsd(), params.position.sizeInUsd());
             cache.estimatedRemainingPnlUsd = cache.estimatedPositionPnlUsd - cache.estimatedRealizedPnlUsd;
 
+            // 估算剩余仓位的健康度（willPositionCollateralBeSufficient）
             PositionUtils.WillPositionCollateralBeSufficientValues memory positionValues = PositionUtils.WillPositionCollateralBeSufficientValues(
                 params.position.sizeInUsd() - params.order.sizeDeltaUsd(), // positionSizeInUsd
                 params.position.collateralAmount() - params.order.initialCollateralDeltaAmount(), // positionCollateralAmount
@@ -159,6 +161,7 @@ library DecreasePositionUtils {
                 // since the initialCollateralDeltaAmount will be set to zero, the initialCollateralDeltaAmount
                 // should be added back to the estimatedRemainingCollateralUsd
                 estimatedRemainingCollateralUsd += (params.order.initialCollateralDeltaAmount() * cache.collateralTokenPrice.min).toInt256();
+                // 若剩余抵押品不足（考虑未实现盈亏和费用），禁止提取抵押或强制全平仓
                 params.order.setInitialCollateralDeltaAmount(0);
             }
 
@@ -208,7 +211,9 @@ library DecreasePositionUtils {
             params.order.setDecreasePositionSwapType(Order.DecreasePositionSwapType.NoSwap);
         }
 
+        // 清算订单验证
         if (BaseOrderUtils.isLiquidationOrder(params.order.orderType())) {
+            // 调用 PositionUtils.isPositionLiquidatable 确认仓位是否可清算
             (bool isLiquidatable, string memory reason, PositionUtils.IsPositionLiquidatableInfo memory info) = PositionUtils.isPositionLiquidatable(
                 params.contracts.dataStore,
                 params.contracts.referralStorage,

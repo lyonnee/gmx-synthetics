@@ -112,6 +112,7 @@ library ExecuteDepositUtils {
             revert Errors.EmptyDeposit();
         }
 
+        // 预言机价格检查
         if (params.oracle.minTimestamp() < deposit.updatedAtTime()) {
             revert Errors.OracleTimestampsAreSmallerThanRequired(
                 params.oracle.minTimestamp(),
@@ -119,6 +120,7 @@ library ExecuteDepositUtils {
             );
         }
 
+        // 订单超过过期时间, 不予执行
         ExecuteDepositCache memory cache;
         cache.requestExpirationTime = params.dataStore.getUint(Keys.REQUEST_EXPIRATION_TIME);
         cache.maxOracleTimestamp = params.oracle.maxTimestamp();
@@ -131,18 +133,23 @@ library ExecuteDepositUtils {
             );
         }
 
+        // 校验市场启用状态
         cache.market = MarketUtils.getEnabledMarket(params.dataStore, deposit.market());
 
+        // 如果是该市场的第一笔存款, 需要额外的校验
         _validateFirstDeposit(params, deposit, cache.market);
 
+        // 从预言机获取市场价格
         cache.prices = MarketUtils.getMarketPrices(params.oracle, cache.market);
 
+        // 更新仓位影响池
         MarketUtils.distributePositionImpactPool(
             params.dataStore,
             params.eventEmitter,
             cache.market.marketToken
         );
 
+        // 更新资金池费率和借贷费率
         PositionUtils.updateFundingAndBorrowingState(
             params.dataStore,
             params.eventEmitter,
@@ -156,6 +163,7 @@ library ExecuteDepositUtils {
         // due to pnl
         // note that this is just a validation for deposits, there is no actual
         // minimum price for a market token
+        // 检查存款是否超过最大可接受的未实现收益（Max PNL Factor），防止价格崩溃。
         MarketUtils.validateMaxPnl(
             params.dataStore,
             cache.market,
@@ -164,6 +172,8 @@ library ExecuteDepositUtils {
             Keys.MAX_PNL_FACTOR_FOR_DEPOSITS
         );
 
+        // 存入的多头代币兑换
+        // 如果存入的是目标代币, 则不需要兑换
         cache.longTokenAmount = swap(
             params,
             deposit.longTokenSwapPath(),
@@ -174,6 +184,7 @@ library ExecuteDepositUtils {
             deposit.uiFeeReceiver()
         );
 
+        // 存入的空头代币兑换
         cache.shortTokenAmount = swap(
             params,
             deposit.shortTokenSwapPath(),
@@ -184,13 +195,16 @@ library ExecuteDepositUtils {
             deposit.uiFeeReceiver()
         );
 
+        // 校验存入的代币数量, 不应存入空单
         if (cache.longTokenAmount == 0 && cache.shortTokenAmount == 0) {
             revert Errors.EmptyDepositAmountsAfterSwap();
         }
 
+        // 计算存入的多/空头代币的USD价值
         cache.longTokenUsd = cache.longTokenAmount * cache.prices.longTokenPrice.midPrice();
         cache.shortTokenUsd = cache.shortTokenAmount * cache.prices.shortTokenPrice.midPrice();
 
+        // 计算当前存款对市场价格的影响（Price Impact）
         cache.priceImpactUsd = SwapPricingUtils.getPriceImpactUsd(
             SwapPricingUtils.GetPriceImpactUsdParams(
                 params.dataStore,
@@ -205,6 +219,7 @@ library ExecuteDepositUtils {
             )
         );
 
+        // 如果用户存入 longToken，计算可铸造的市场代币并存入资金池
         if (cache.longTokenAmount > 0) {
             _ExecuteDepositParams memory _params = _ExecuteDepositParams(
                 cache.market,
@@ -239,6 +254,7 @@ library ExecuteDepositUtils {
             cache.receivedMarketTokens += _executeDeposit(params, _params);
         }
 
+        // 确保用户最终获得的市场代币数量大于 minMarketTokens，否则回滚存款。
         if (cache.receivedMarketTokens < deposit.minMarketTokens()) {
             revert Errors.MinMarketTokens(cache.receivedMarketTokens, deposit.minMarketTokens());
         }
@@ -247,6 +263,7 @@ library ExecuteDepositUtils {
         // external callbacks
         MarketUtils.validateMarketTokenBalance(params.dataStore, cache.market);
 
+        // 触发存款执行事件
         DepositEventUtils.emitDepositExecuted(
             params.eventEmitter,
             params.key,
@@ -282,6 +299,7 @@ library ExecuteDepositUtils {
         cache.callbackEventData.uintItems.setItem(0, "receivedMarketTokens", cache.receivedMarketTokens);
         CallbackUtils.afterDepositExecution(params.key, deposit, cache.callbackEventData);
 
+        // 支付执行费给keeper
         GasUtils.payExecutionFee(
             params.dataStore,
             params.eventEmitter,
@@ -304,6 +322,7 @@ library ExecuteDepositUtils {
     function _executeDeposit(ExecuteDepositParams memory params, _ExecuteDepositParams memory _params) internal returns (uint256) {
         // for markets where longToken == shortToken, the price impact factor should be set to zero
         // in which case, the priceImpactUsd would always equal zero
+        // 计算并收取相关的费用
         SwapPricingUtils.SwapFees memory fees = SwapPricingUtils.getSwapFees(
             params.dataStore,
             _params.market.marketToken,
@@ -313,6 +332,7 @@ library ExecuteDepositUtils {
             params.swapPricingType
         );
 
+        // 更新可领取的交易费余额
         FeeUtils.incrementClaimableFeeAmount(
             params.dataStore,
             params.eventEmitter,
@@ -322,6 +342,7 @@ library ExecuteDepositUtils {
             Keys.DEPOSIT_FEE_TYPE
         );
 
+        // 更新可领取的 UI 费余额
         FeeUtils.incrementClaimableUiFeeAmount(
             params.dataStore,
             params.eventEmitter,
@@ -344,6 +365,7 @@ library ExecuteDepositUtils {
 
         uint256 mintAmount;
 
+        // 获取市场池的最新价值（poolValue），用于计算 Market Token 兑换比例。
         MarketPoolValueInfo.Props memory poolValueInfo = MarketUtils.getPoolValueInfo(
             params.dataStore,
             _params.market,
@@ -398,7 +420,8 @@ library ExecuteDepositUtils {
         if (_params.priceImpactUsd > 0 && marketTokensSupply == 0) {
             _params.priceImpactUsd = 0;
         }
-
+        
+        // 当存款带来市场价格正向变化时
         if (_params.priceImpactUsd > 0) {
             // when there is a positive price impact factor,
             // tokens from the swap impact pool are used to mint additional market tokens for the user
@@ -414,6 +437,9 @@ library ExecuteDepositUtils {
             // it is possible that the addition of the positive impact amount of tokens into the pool
             // could increase the imbalance of the pool, for most cases this should not be a significant
             // change compared to the improvement of balance from the actual deposit
+            
+
+            // 应用价格影响，并确保不超过 Swap Impact Pool 的最大容量
             (int256 positiveImpactAmount, /* uint256 cappedDiffUsd */) = MarketUtils.applySwapImpactWithCap(
                 params.dataStore,
                 params.eventEmitter,
@@ -433,6 +459,7 @@ library ExecuteDepositUtils {
             //
             // it is possible for the pool value to be more than zero and the token supply
             // to be zero, in that case, the market token price is also treated as 1 USD
+            // 将 USD 金额转换为市场代币数量
             mintAmount += MarketUtils.usdToMarketTokenAmount(
                 positiveImpactAmount.toUint256() * _params.tokenOutPrice.max,
                 poolValue,
@@ -440,6 +467,7 @@ library ExecuteDepositUtils {
             );
 
             // deposit the token out, that was withdrawn from the impact pool, to mint market tokens
+            // 更新流动性池的代币余额
             MarketUtils.applyDeltaToPoolAmount(
                 params.dataStore,
                 params.eventEmitter,
@@ -456,7 +484,7 @@ library ExecuteDepositUtils {
             // long token's deposit cap to be exceeded
             // in this case, it is preferrable that the pool can still be
             // rebalanced even if the deposit cap may be exceeded
-
+            // 验证流动性池的代币余额是否满足存款条件
             MarketUtils.validatePoolAmount(
                 params.dataStore,
                 _params.market,
@@ -464,12 +492,14 @@ library ExecuteDepositUtils {
             );
         }
 
+        // 当存款带来市场价格负向变化时
         if (_params.priceImpactUsd < 0) {
             // when there is a negative price impact factor,
             // less of the deposit amount is used to mint market tokens
             // for example, if 10 ETH is deposited and there is a negative price impact
             // only 9.995 ETH may be used to mint market tokens
             // the remaining 0.005 ETH will be stored in the swap impact pool
+            // 减少存款后可兑换的 Market Token
             (int256 negativeImpactAmount, /* uint256 cappedDiffUsd */) = MarketUtils.applySwapImpactWithCap(
                 params.dataStore,
                 params.eventEmitter,
@@ -482,6 +512,7 @@ library ExecuteDepositUtils {
             fees.amountAfterFees -= (-negativeImpactAmount).toUint256();
         }
 
+        // 根据 fees.amountAfterFees 计算用户最终可以获得的 Market Token 数量
         mintAmount += MarketUtils.usdToMarketTokenAmount(
             fees.amountAfterFees * _params.tokenInPrice.min,
             poolValue,
@@ -578,6 +609,7 @@ library ExecuteDepositUtils {
             revert Errors.InvalidReceiverForFirstDeposit(deposit.receiver(), RECEIVER_FOR_FIRST_DEPOSIT);
         }
 
+        // 校验存入得代币数量应大于最低要求数量
         if (deposit.minMarketTokens() < minMarketTokens) {
             revert Errors.InvalidMinMarketTokensForFirstDeposit(deposit.minMarketTokens(), minMarketTokens);
         }

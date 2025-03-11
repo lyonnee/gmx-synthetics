@@ -103,11 +103,14 @@ library SwapUtils {
      * part of the swap and the amount of the received token.
      */
     function swap(SwapParams memory params) external returns (address, uint256) {
+        // 如果输入的金额为0, 直接返还
         if (params.amountIn == 0) {
             return (params.tokenIn, params.amountIn);
         }
 
+        // 如果兑换路径为空
         if (params.swapPathMarkets.length == 0) {
+            // 因为没有发生兑换, 输出数量不应大于输入数量
             if (params.amountIn < params.minOutputAmount) {
                 revert Errors.InsufficientOutputAmount(params.amountIn, params.minOutputAmount);
             }

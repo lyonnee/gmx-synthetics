@@ -87,6 +87,7 @@ contract DepositHandler is IDepositHandler, BaseHandler {
         onlyOrderKeeper
         withOraclePrices(oracleParams)
     {
+        // 校验执行的gas
         uint256 startingGas = gasleft();
 
         Deposit.Props memory deposit = DepositStoreUtils.get(dataStore, key);
@@ -141,8 +142,10 @@ contract DepositHandler is IDepositHandler, BaseHandler {
     ) external onlySelf {
         uint256 startingGas = gasleft();
 
+        // 判断功能是否开启
         FeatureUtils.validateFeature(dataStore, Keys.executeDepositFeatureDisabledKey(address(this)));
 
+        // 构建执行添加流动性操作需要的参数
         ExecuteDepositUtils.ExecuteDepositParams memory params = ExecuteDepositUtils.ExecuteDepositParams(
             dataStore,
             eventEmitter,

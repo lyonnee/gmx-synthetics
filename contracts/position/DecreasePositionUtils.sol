@@ -132,6 +132,7 @@ library DecreasePositionUtils {
                 -params.order.sizeDeltaUsd().toInt256() // openInterestDelta
             );
 
+            // 预测部分平仓后剩余仓位的抵押是否足够
             (bool willBeSufficient, int256 estimatedRemainingCollateralUsd) = PositionUtils.willPositionCollateralBeSufficient(
                 params.contracts.dataStore,
                 params.market,
@@ -145,6 +146,7 @@ library DecreasePositionUtils {
             // having an insufficient amount of collateral
             // this helps to prevent gaming by opening a position then reducing collateral
             // to increase the leverage of the position
+            // 若剩余抵押品不足
             if (!willBeSufficient) {
                 if (params.order.sizeDeltaUsd() == 0) {
                     revert Errors.UnableToWithdrawCollateral(estimatedRemainingCollateralUsd);
@@ -161,7 +163,7 @@ library DecreasePositionUtils {
                 // since the initialCollateralDeltaAmount will be set to zero, the initialCollateralDeltaAmount
                 // should be added back to the estimatedRemainingCollateralUsd
                 estimatedRemainingCollateralUsd += (params.order.initialCollateralDeltaAmount() * cache.collateralTokenPrice.min).toInt256();
-                // 若剩余抵押品不足（考虑未实现盈亏和费用），禁止提取抵押或强制全平仓
+                // 禁止提取抵押或强制全平仓
                 params.order.setInitialCollateralDeltaAmount(0);
             }
 

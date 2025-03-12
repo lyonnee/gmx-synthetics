@@ -58,16 +58,6 @@ library ExecuteOrderUtils {
             params.order.isLong()
         );
 
-<<<<<<< HEAD
-=======
-        // 验证订单有效时间(超时处理)
-        BaseOrderUtils.validateOrderValidFromTime(
-            params.order.orderType(),
-            params.order.validFromTime()
-        );
-
-        // 获取当前市场价, 包括多空抵押币,和索引代币的价格
->>>>>>> 327596be (执行订单相关流程代码注释)
         MarketUtils.MarketPrices memory prices = MarketUtils.getMarketPrices(
             params.contracts.oracle,
             params.market

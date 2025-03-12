@@ -274,17 +274,12 @@ library GasUtils {
         // 输入资产swap的gas limit总和
         uint256 gasForSwaps = swapCount * gasPerSwap;
 
-<<<<<<< HEAD
         if (deposit.initialLongTokenAmount() == 0 || deposit.initialShortTokenAmount() == 0) {
             return dataStore.getUint(Keys.depositGasLimitKey(true)) + deposit.callbackGasLimit() + gasForSwaps;
         }
 
         // dataStore.getUint(Keys.depositGasLimitKey()) 部署合约是配置的, GMX配置的值是1_800_000
         return dataStore.getUint(Keys.depositGasLimitKey(false)) + deposit.callbackGasLimit() + gasForSwaps;
-=======
-        // dataStore.getUint(Keys.depositGasLimitKey()) 部署合约是配置的, GMX配置的值是1_800_000
-        return dataStore.getUint(Keys.depositGasLimitKey()) + deposit.callbackGasLimit() + gasForSwaps;
->>>>>>> 327596be (执行订单相关流程代码注释)
     }
 
     // @dev the estimated gas limit for withdrawals

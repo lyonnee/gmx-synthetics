@@ -19,10 +19,10 @@ async function getValues(): Promise<{
     return {
       wnt: await ethers.getContractAt("WNT", "0xe39Ab88f8A4777030A534146A9Ca3B52bd5D43A3"),
     };
-  } else if (hre.network.name === "localhost") {
+  }else if (hre.network.name === "localhost" || "testXone"){
     return {
-      wnt: await ethers.getContract("WETH"),
-    };
+      wnt: await ethers.getContract("WXOC"),
+    }
   }
 
   throw new Error("unsupported network");
@@ -39,7 +39,7 @@ async function main() {
   const [wallet] = await ethers.getSigners();
 
   const { wnt } = await getValues();
-  const longTokenAmount = expandDecimals(1, 15);
+  const longTokenAmount = expandDecimals(100, 15);
   const executionFee = expandDecimals(1, 15);
 
   if ((await wnt.balanceOf(wallet.address)).lt(longTokenAmount.add(executionFee))) {
@@ -57,7 +57,7 @@ async function main() {
   console.log("WNT balance %s", await wnt.balanceOf(wallet.address));
 
   const usdc: MintableToken = await ethers.getContract("USDC");
-  const shortTokenAmount = expandDecimals(1, 6); // 1 USDC
+  const shortTokenAmount = expandDecimals(1000, 6); // 1 USDC
   const usdcAllowance = await usdc.allowance(wallet.address, router.address);
   console.log("USDC address %s", usdc.address);
   console.log("USDC allowance %s", usdcAllowance.toString());

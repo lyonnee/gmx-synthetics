@@ -58,6 +58,7 @@ async function createOrder({
   const orderParams = {
     addresses: {
       receiver,
+      cancellationReceiver: AddressZero,
       callbackContract: AddressZero,
       uiFeeReceiver: AddressZero,
       market,
@@ -109,10 +110,10 @@ async function main() {
   const referralCode = ethers.constants.HashZero;
 
   // a list of markets can be printed using scripts/printMarkets.ts
-  const ETH_USD_MARKET = "0x95237E65Bb82B9d8Cd710C15AEf8d9a653bC54a8";
+  const ETH_USD_MARKET = "0x1e004A04d5eE84fb2A40E46F169B2C6d819D40ea";
 
   // list of tokens can be found in config/tokens.ts
-  const USDC = "0x3321Fd36aEaB0d5CdfD26f4A3A93E2D2aAcCB99f";
+  const USDC = "0x5eb3Bc0a489C5A8288765d2336659EbCA68FCd00";
 
   const market = ETH_USD_MARKET;
 

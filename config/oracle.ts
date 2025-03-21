@@ -49,14 +49,63 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<OracleCo
     testSigners = (await hre.ethers.getSigners()).slice(10).map((signer) => signer.address);
   }
 
+  const getNamedAccounts = hre.getNamedAccounts;
+  if (network.name === "testXone" || "localhost"){
+    const { deployer } = await getNamedAccounts();
+    testSigners = [deployer];
+  }
+
   const config: { [network: string]: OracleConfig } = {
     localhost: {
       signers: testSigners,
       minOracleSigners: 0,
       minOracleBlockConfirmations: 255,
-      maxOraclePriceAge: 60 * 60 * 24,
+      maxOraclePriceAge: 60 * 60,
       maxOracleTimestampRange: 60,
+      chainlinkPaymentToken: "0x99bbA657f2BbC93c02D617f8bA121cB8Fc104Acf",
       maxRefPriceDeviationFactor: decimalToFloat(5, 1), // 50%
+      tokens: {
+        BTC: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "8000000000000",
+          },
+        },
+        ETH: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "200000000000",
+          },
+        },
+        SOL: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "18000000000",
+          },
+        },
+        USDC: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "100000000",
+          },
+        },
+        USDT: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "100000000",
+          },
+        },
+      },
     },
 
     hardhat: {
@@ -90,6 +139,58 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<OracleCo
             heartbeatDuration: 24 * 60 * 60,
             deploy: true,
             initPrice: "500000000000",
+          },
+        },
+      },
+    },
+
+    testXone: {
+      signers: testSigners,
+      minOracleSigners: 0,
+      minOracleBlockConfirmations: 255,
+      maxOraclePriceAge: 60 * 60,
+      maxOracleTimestampRange: 60,
+      chainlinkPaymentToken: "0x99bbA657f2BbC93c02D617f8bA121cB8Fc104Acf",
+      maxRefPriceDeviationFactor: decimalToFloat(5, 1), // 50%
+      tokens: {
+        BTC: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "8000000000000",
+          },
+        },
+        ETH: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "200000000000",
+          },
+        },
+        SOL: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "18000000000",
+          },
+        },
+        USDC: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "100000000",
+          },
+        },
+        USDT: {
+          priceFeed: {
+            decimals: 8,
+            heartbeatDuration: 24 * 60 * 60,
+            deploy: true,
+            initPrice: "100000000",
           },
         },
       },

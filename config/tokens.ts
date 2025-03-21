@@ -524,32 +524,109 @@ const config: {
     },
   },
   localhost: {
-    WETH: {
-      wrappedNative: true,
-      decimals: 18,
-      transferGasLimit: 200 * 1000,
+    // dataStreamFeedId use testnet
+    WXOC: {
       deploy: true,
+      decimals: 18,
+      wrappedNative: true,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x00034881db604b551ff226aa414ba73dd5b2be0a06834124dafa9bf66871ce89", // use sui feed
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
     },
-    WBTC: {
+    BTC: {
+      deploy: true,
       decimals: 8,
       transferGasLimit: 200 * 1000,
-      deploy: true,
+      dataStreamFeedId: "0x00037da06d56d083fe599397a4769a042d63aa73dc4ef57709d31e9971a5b439",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
     },
-    USDC: {
-      decimals: 6,
-      transferGasLimit: 200 * 1000,
+    ETH: {
       deploy: true,
-    },
-    USDT: {
-      decimals: 6,
+      decimals: 18,
       transferGasLimit: 200 * 1000,
-      deploy: true,
+      dataStreamFeedId: "0x000359843a543ee2fe414dc14c7e7920ef10f4372990b79d6361cdc0dd1ba782",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
     },
     SOL: {
-      synthetic: true,
-      decimals: 18,
+      deploy: true,
+      decimals: 9,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x0003d338ea2ac3be9e026033b1aa601673c37bab5e13851c59966f9f820754d6",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    USDC: {
+      deploy: true,
+      decimals: 6,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x0003dc85e8b01946bf9dfd8b0db860129181eb6105a8c8981d9f28e00b6f60d9",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    USDT: {
+      deploy: true,
+      decimals: 6,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x00032874077216155926e26c159c1c20a572921371d9de605fe9633e48d136f9",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
     },
   },
+  testXone:{
+    // dataStreamFeedId use testnet
+    WXOC: {
+      deploy: true,
+      decimals: 18,
+      wrappedNative: true,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x00034881db604b551ff226aa414ba73dd5b2be0a06834124dafa9bf66871ce89", // use sui feed
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    BTC: {
+      deploy: true,
+      decimals: 8,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x00037da06d56d083fe599397a4769a042d63aa73dc4ef57709d31e9971a5b439",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    ETH: {
+      deploy: true,
+      decimals: 18,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x000359843a543ee2fe414dc14c7e7920ef10f4372990b79d6361cdc0dd1ba782",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    SOL: {
+      deploy: true,
+      decimals: 9,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x0003d338ea2ac3be9e026033b1aa601673c37bab5e13851c59966f9f820754d6",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    USDC: {
+      deploy: true,
+      decimals: 6,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x0003dc85e8b01946bf9dfd8b0db860129181eb6105a8c8981d9f28e00b6f60d9",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+    USDT: {
+      deploy: true,
+      decimals: 6,
+      transferGasLimit: 200 * 1000,
+      dataStreamFeedId: "0x00032874077216155926e26c159c1c20a572921371d9de605fe9633e48d136f9",
+      dataStreamFeedDecimals: 18,
+      oracleProvider: "gmOracle",
+    },
+  }
 };
 
 export default async function (hre: HardhatRuntimeEnvironment): Promise<TokensConfig> {

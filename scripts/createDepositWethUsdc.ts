@@ -15,9 +15,9 @@ async function getValues(): Promise<{
     return {
       wnt: await ethers.getContractAt("WNT", "0x1D308089a2D1Ced3f1Ce36B1FcaF815b07217be3"),
     };
-  } else if (hre.network.name === "localhost") {
+  } else if (hre.network.name === "localhost" ||"testXone") {
     return {
-      wnt: await ethers.getContract("WETH"),
+      wnt: await ethers.getContract("WXOC"),
     };
   }
 
@@ -25,6 +25,17 @@ async function getValues(): Promise<{
 }
 
 async function main() {
+ /*
+ mock feed price
+ */
+//  const wethPriceFeed = await hre.ethers.getContract("ETHPriceFeed");
+//  await wethPriceFeed.setAnswer(expandDecimals(2000, 4));
+ 
+//  const usdcPriceFeed = await hre.ethers.getContract("USDCPriceFeed");
+//  await usdcPriceFeed.setAnswer(expandDecimals(1, 6));
+
+
+
   console.log("run createDepositWethUsdc");
   const marketFactory = await ethers.getContract("MarketFactory");
   const roleStore = await ethers.getContract("RoleStore");
@@ -37,7 +48,7 @@ async function main() {
 
   const [wallet] = await ethers.getSigners();
 
-  const executionFee = expandDecimals(1, 15); // 0.001 WNT
+  const executionFee = expandDecimals(5, 15); // 0.001 WNT
   if ((await wnt.balanceOf(wallet.address)).lt(executionFee)) {
     console.log("depositing %s WNT", executionFee.toString());
     await wnt.deposit({ value: executionFee });
@@ -52,8 +63,8 @@ async function main() {
   }
   console.log("WNT balance %s", await wnt.balanceOf(wallet.address));
 
-  const weth: MintableToken = await ethers.getContract("WETH");
-  const longTokenAmount = expandDecimals(1, 17); // 0.1 weth
+  const weth: MintableToken = await ethers.getContract("ETH");
+  const longTokenAmount = expandDecimals(10, 17); // 0.1 weth
   const wethAllowance = await weth.allowance(wallet.address, router.address);
   console.log("weth address %s", weth.address);
   console.log("weth allowance %s", wethAllowance.toString());
@@ -69,7 +80,7 @@ async function main() {
   }
 
   const usdc: MintableToken = await ethers.getContract("USDC");
-  const shortTokenAmount = expandDecimals(100, 6); // 100 USDC
+  const shortTokenAmount = expandDecimals(1000, 6); // 100 USDC
   const usdcAllowance = await usdc.allowance(wallet.address, router.address);
   console.log("USDC address %s", usdc.address);
   console.log("USDC allowance %s", usdcAllowance.toString());

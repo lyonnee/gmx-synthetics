@@ -208,6 +208,24 @@ export default async function (hre: HardhatRuntimeEnvironment): Promise<RolesCon
       },
       ...testnetConfig,
     },
+    testXone:{
+      CONTROLLER: { [deployer]: true },
+      ORDER_KEEPER: { [deployer]: true },
+      ADL_KEEPER: { [deployer]: true },
+      LIQUIDATION_KEEPER: { [deployer]: true },
+      MARKET_KEEPER: { [deployer]: true },
+      FROZEN_ORDER_KEEPER: { [deployer]: true },
+      CONFIG_KEEPER: { [deployer]: true },
+    },
+    localhost:{
+      CONTROLLER: { [deployer]: true },
+      ORDER_KEEPER: { [deployer]: true },
+      ADL_KEEPER: { [deployer]: true },
+      LIQUIDATION_KEEPER: { [deployer]: true },
+      MARKET_KEEPER: { [deployer]: true },
+      FROZEN_ORDER_KEEPER: { [deployer]: true },
+      CONFIG_KEEPER: { [deployer]: true },
+    }
   };
 
   return config[hre.network.name];

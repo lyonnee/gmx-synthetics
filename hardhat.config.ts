@@ -14,6 +14,7 @@ import "hardhat-deploy";
 
 import "@typechain/hardhat";
 import "@nomiclabs/hardhat-ethers";
+import "@solarity/hardhat-gobind"
 
 // extends hre with gmx domain data
 import "./config";
@@ -29,6 +30,8 @@ const getRpcUrl = (network) => {
     arbitrumSepolia: "https://sepolia-rollup.arbitrum.io/rpc",
     avalancheFuji: "https://api.avax-test.network/ext/bc/C/rpc",
     snowtrace: "https://api.avax.network/ext/bc/C/rpc",
+    testXone:"https://rpc-testnet.xone.plus",
+    localhost:"http://127.0.0.1:8545"
   };
 
   let rpc = defaultRpcs[network];
@@ -45,6 +48,14 @@ const getRpcUrl = (network) => {
 };
 
 const getEnvAccounts = (chainName?: string) => {
+  if (chainName === "testXone") {
+    return ["xxxxxxxxxxxxxxx"]
+  }
+
+  if (chainName === "localhost") {
+    return ["xxxxxxxxxxxxxxxx"]
+  }
+
   const { ACCOUNT_KEY, ACCOUNT_KEY_FILE, ARBITRUM_SEPOLIA_ACCOUNT_KEY } = process.env;
 
   if (chainName === "arbitrumSepolia" && ARBITRUM_SEPOLIA_ACCOUNT_KEY) {
@@ -100,6 +111,8 @@ const config: HardhatUserConfig = {
     },
     localhost: {
       saveDeployments: true,
+      live: true,
+      url: getRpcUrl("localhost"),
     },
     arbitrum: {
       url: getRpcUrl("arbitrum"),
@@ -167,6 +180,13 @@ const config: HardhatUserConfig = {
       blockGasLimit: 2500000,
       // gasPrice: 50000000000,
     },
+    testXone:{
+      url: getRpcUrl("testXone"),
+      chainId: 33772211,
+      accounts: getEnvAccounts("testXone"),
+      blockGasLimit: 1000000000,
+      // testnet.xscscan.com
+    }
   },
   // hardhat-deploy has issues with some contracts
   // https://github.com/wighawag/hardhat-deploy/issues/264
@@ -208,6 +228,14 @@ const config: HardhatUserConfig = {
   },
   mocha: {
     timeout: 100000000,
+  },
+  gobind: {
+    outdir: "./generated-types/go-bindings",
+    deployable: false,
+    runOnCompile: false,
+    verbose: false,
+    onlyFiles: [],
+    skipFiles: [],
   },
 };
 

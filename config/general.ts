@@ -121,6 +121,8 @@ export default async function ({ network }: HardhatRuntimeEnvironment) {
       sequencerUptimeFeed: "0xFdB631F5EE196F0ed6FAa767959853A9F217697D",
     },
     avalanche: {},
+    testXone:{},
+    localhost:{}
   }[network.name];
 
   if (!networkConfig) {
